@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>İzometrik Oda</title>
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background-color: #333333;
+    }
+
+    .room {
+      position: relative;
+      width: 800px;
+      height: 800px;
+      background-color: #ccc;
+      transform: rotateX(45deg) rotateZ(45deg);
+      transform-style: preserve-3d;
+      overflow: hidden;
+      transition: filter 3s cubic-bezier(0.65, 0, 0.35, 1);
+    }
+
+    .room.blurred {
+      filter: blur(6px);
+    }
+
+    .character {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background-color: #ff0000;
+      top: 390px;
+      left: 390px;
+      z-index: 2;
+    }
+
+    .box {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background: linear-gradient(135deg, #ffd700, #ffa500);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      border: 1px solid #b8860b;
+      z-index: 1;
+    }
+
+    .particle {
+      position: absolute;
+      background-color: yellow;
+      border-radius: 50%;
+      animation: explode 0.5s ease-out forwards;
+      opacity: 0.8;
+      pointer-events: none;
+    }
+
+    .magnet-indicator {
+      position: absolute;
+      background-color: rgba(255, 255, 0, 0.1);
+      border-radius: 50%;
+      border: 2px dashed rgba(255, 255, 0, 0.5);
+      z-index: 0;
+      pointer-events: none;
+      box-sizing: border-box;
+    }
+
+    @keyframes explode {
+      0% { transform: translate(0, 0) scale(1); opacity: 1; }
+      100% { transform: translate(var(--x), var(--y)) scale(0.5); opacity: 0; }
+    }
+
+    .ui {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      align-items: center;
+      font-family: sans-serif;
+      color: white;
+      font-size: 18px;
+    }
+
+    .ui div {
+      width: 24px;
+      height: 24px;
+      background: linear-gradient(135deg, #ffd700, #ffa500);
+      border: 1px solid #b8860b;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      margin-right: 8px;
+    }
+
+    .complete {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: sans-serif;
+      text-align: center;
+      color: white;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="ui">
+    <div></div>
+    <span id="score">0</span>
+    <button id="freePlayBtn" style="margin-left: 20px; padding: 6px 12px; background-color: #555; color: white; border: none; border-radius: 4px; cursor: pointer;">Free Play: OFF</button>
+  </div>
+
+  <div class="room" id="room">
+    <div class="character" id="character"></div>
+    <div class="magnet-indicator" id="magnetIndicator" style="display: none;"></div>
+  </div>
+
+  <div class="complete" id="complete">
+    <div style="text-align: center; font-size: 50px;">
+      Level Complete<br>
+      <div style="position: relative; display: inline-block; font-size: 40px; margin-top: 20px; filter: brightness(1.5) blur(0.2px); text-shadow: 0 0 8px rgba(255, 255, 150, 0.6);">
+        Play Again
+        <button onclick="location.reload()" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; border: none; background: none; cursor: pointer;"></button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const character = document.getElementById('character');
+    const room = document.getElementById('room');
+    const scoreDisplay = document.getElementById('score');
+    const magnetIndicator = document.getElementById('magnetIndicator');
+    const completeText = document.getElementById('complete');
+    const freePlayBtn = document.getElementById('freePlayBtn');
+
+    let posX = 390;
+    let posY = 390;
+    const step = 1;
+    const boxSize = 20;
+    const maxBoxes = 8;
+    const boxes = [];
+    let score = 0;
+    let magnetActive = false;
+    let magnetRadius = 30;
+    let boostAvailable = false;
+    let controlsEnabled = true;
+    let freePlay = false;
+
+    freePlayBtn.addEventListener('click', () => {
+      freePlay = !freePlay;
+      freePlayBtn.textContent = `Free Play: ${freePlay ? 'ON' : 'OFF'}`;
+      freePlayBtn.style.backgroundColor = freePlay ? '#2e8b57' : '#555';
+    });
+
+    const keys = {};
+
+    document.addEventListener('keydown', (e) => {
+      if (!controlsEnabled) return;
+      keys[e.key.toLowerCase()] = true;
+
+      if (e.code === 'Space' && boostAvailable && !magnetActive) {
+        activateMagnet();
+      }
+    });
+
+    document.addEventListener('keyup', (e) => {
+      if (!controlsEnabled) return;
+      keys[e.key.toLowerCase()] = false;
+    });
+
+    function activateMagnet() {
+      magnetActive = true;
+      magnetRadius = 150;
+      boostAvailable = false;
+      score -= 20;
+      scoreDisplay.textContent = score;
+      magnetIndicator.style.width = `${magnetRadius * 2}px`;
+      magnetIndicator.style.height = `${magnetRadius * 2}px`;
+      magnetIndicator.style.display = "block";
+
+      setTimeout(() => {
+        magnetActive = false;
+        magnetRadius = 30;
+        magnetIndicator.style.display = "none";
+        if (score >= 20) boostAvailable = true;
+      }, 15000);
+    }
+
+    function createParticles(x, y) {
+      for (let i = 0; i < 25; i++) {
+        const particle = document.createElement('div');
+        particle.classList.add('particle');
+        particle.style.left = `${x + boxSize/2}px`;
+        particle.style.top = `${y + boxSize/2}px`;
+        const offsetX = (Math.random() - 0.5) * 80 + 'px';
+        const offsetY = (Math.random() - 0.5) * 80 + 'px';
+        const size = Math.floor(Math.random() * 5) + 8 + 'px';
+        particle.style.setProperty('--x', offsetX);
+        particle.style.setProperty('--y', offsetY);
+        particle.style.width = size;
+        particle.style.height = size;
+        room.appendChild(particle);
+        setTimeout(() => particle.remove(), 600);
+      }
+    }
+
+    function spawnBox() {
+      let valid = false;
+      let newX, newY;
+      while (!valid) {
+        newX = Math.floor(Math.random() * (800 - boxSize));
+        newY = Math.floor(Math.random() * (800 - boxSize));
+        valid = true;
+        for (const box of boxes) {
+          const dx = Math.abs(box.x - newX);
+          const dy = Math.abs(box.y - newY);
+          if (dx < boxSize + 4 && dy < boxSize + 4) {
+            valid = false;
+            break;
+          }
+        }
+      }
+      const box = document.createElement('div');
+      box.classList.add('box');
+      box.style.left = `${newX}px`;
+      box.style.top = `${newY}px`;
+      room.appendChild(box);
+      boxes.push({ element: box, x: newX, y: newY });
+    }
+
+    function completeLevel() {
+      room.classList.add('blurred');
+      setTimeout(() => {
+        controlsEnabled = false;
+        completeText.style.display = 'block';
+      }, 3000);
+    }
+
+    function gameLoop() {
+      if (controlsEnabled) {
+        if (keys['w']) { posX -= step; posY -= step; }
+        if (keys['s']) { posX += step; posY += step; }
+        if (keys['a']) { posX -= step; posY += step; }
+        if (keys['d']) { posX += step; posY -= step; }
+      }
+
+      posX = Math.max(0, Math.min(780, posX));
+      posY = Math.max(0, Math.min(780, posY));
+      character.style.left = `${posX}px`;
+      character.style.top = `${posY}px`;
+
+      if (magnetActive) {
+        magnetIndicator.style.left = `${posX - magnetRadius}px`;
+        magnetIndicator.style.top = `${posY - magnetRadius}px`;
+      }
+
+      for (let i = boxes.length - 1; i >= 0; i--) {
+        const b = boxes[i];
+        const dx = (posX + 10) - (b.x + boxSize / 2);
+        const dy = (posY + 10) - (b.y + boxSize / 2);
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance < magnetRadius) {
+          createParticles(b.x, b.y);
+          b.element.remove();
+          boxes.splice(i, 1);
+          score++;
+          scoreDisplay.textContent = score;
+
+          if (score >= 20 && !magnetActive) boostAvailable = true;
+          if (score === 100 && !freePlay) completeLevel();
+        }
+      }
+
+      if (boxes.length < maxBoxes) spawnBox();
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>
